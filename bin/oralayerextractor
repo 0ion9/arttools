@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import sys,os
+from argparse import ArgumentParser
+from plumbum.cmd import convert, unzip
+
+
+def parse_args(args):
+    import re
+    parser = ArgumentParser('Extract layers from ORA files into individual PNG/JPG files, using unzip and ImageMagick')
+    parser.add_argument('-i', '--ignore', help='Layers matching --ignore regexps will not be extracted.', default=['^[Bb]ackground$'],
+                        action='append')
+    parser.add_argument('-x', '--x-border', help='X border, in percentage (eg. 5%%) or absolute pixels (eg. 64)', default='5%')
+    parser.add_argument('-y', '--y-border', help='Y border, in percentage (eg. 5%%) or absolute pixels (eg. 64)', default='5%')
+    parser.add_argument('-b', '--border', help='Equivalent to specifying the same value to -x and -y',
+                        default=None)
+    parser.add_argument('-m', '--max-size', help='Output images larger than this will be shrunken, preserving aspect ratio, to fit.',
+                        default='')
+    parser.add_argument('-t', '--template', help='Naming template.', default='{filename}:{layerpath}')
+    parser.add_argument('-c', '--border-color', help='Border color ("none" for transparency, "background" to match background color)', default='background')
+    parser.add_argument('-C', '--background-color', help='Background color ("none" for transparency)', default='none')
+    parser.add_argument('filename', nargs='+')
+    args = parser.parse_args(args)
+#    if args.border:
+#        args.x_border = args.border
+#        args.y_border = args.border
+
+#    if args.x_border.endswith('%'):
+#        args.x_border = float(args.x_border[:-1])
+#    else:
+#        args.x_border = int(args.x_border)
+
+#    if args.y_border.endswith('%'):
+#        args.y_border = float(args.y_border[:-1])
+#    else:
+#        args.y_border = int(args.y_border)
+
+    if args.border_color == 'background':
+         args.border_color = args.background_color
+
+    if args.max_size:
+       w, h = args.max_size.split('x', 1)
+       w = int(w)
+       h = int(h)
+    else:
+       args.max_size = (0xffffffff, 0xffffffff)
+    args.ignore = [re.compile(r) for r in args.ignore]
+
+    return args
+
+def layers_to_process(stack_xml, ignore_patterns):
+    from lxml.etree import fromstring
+    data = fromstring(stack_xml)
+#    root = data.getroot()
+    candidates = data.xpath('//layer')
+    results = []
+    for node in candidates:
+        attr = node.attrib
+        name = attr['name']
+        if any(r.match(name) for r in ignore_patterns):
+            continue
+        filename = attr['src']
+        results.append((name, filename))
+    return results
+
+if __name__ == "__main__":
+    from zipfile import ZipFile
+    args = parse_args(sys.argv[1:])
+    zf = ZipFile(args.filename[0])
+    s = zf.read('stack.xml')
+    res = layers_to_process(s, args.ignore)
+    print(res)
+    noext_filename = os.path.basename(args.filename[0]).replace('.','_')
+    borderstr = '%sx%s' % (args.x_border, args.y_border)
+    borderargs = []
+    if borderstr != '0x0':
+        if args.border_color == 'none':
+            borderargs.append('-matte')
+        borderargs.extend(('-bordercolor', args.border_color))
+        borderargs.extend(('-border', borderstr))
+    flattenargs = []
+    if args.background_color != 'none':
+        # XXX handle colors with alpha
+        flattenargs.extend(('-background', args.background_color, '-alpha', 'remove'))
+    for lname, filename in res:
+        cmd = unzip['-p', args.filename[0], filename] | convert['-colorspace', 'RGB', 'png:-']['-resize', '1280x960','-colorspace', 'sRGB'][flattenargs][borderargs]['/tmp/%s_%s.png' % (noext_filename, lname)]
+        print ('cmd is', cmd)
+        cmd()
+    
