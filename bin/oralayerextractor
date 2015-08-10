@@ -15,24 +15,16 @@ def parse_args(args):
                         default=None)
     parser.add_argument('-m', '--max-size', help='Output images larger than this will be shrunken, preserving aspect ratio, to fit.',
                         default='')
-    parser.add_argument('-t', '--template', help='Naming template.', default='{filename}:{layerpath}')
+    # not implemented yet
+#    parser.add_argument('-t', '--template', help='Naming template.', default='{filename}:{layerpath}')
     parser.add_argument('-c', '--border-color', help='Border color ("none" for transparency, "background" to match background color)', default='background')
     parser.add_argument('-C', '--background-color', help='Background color ("none" for transparency)', default='none')
+    # XXX support background-tile
     parser.add_argument('filename', nargs='+')
     args = parser.parse_args(args)
-#    if args.border:
-#        args.x_border = args.border
-#        args.y_border = args.border
-
-#    if args.x_border.endswith('%'):
-#        args.x_border = float(args.x_border[:-1])
-#    else:
-#        args.x_border = int(args.x_border)
-
-#    if args.y_border.endswith('%'):
-#        args.y_border = float(args.y_border[:-1])
-#    else:
-#        args.y_border = int(args.y_border)
+    if args.border:
+        args.x_border = args.border
+        args.y_border = args.border
 
     if args.border_color == 'background':
          args.border_color = args.background_color
@@ -47,10 +39,10 @@ def parse_args(args):
 
     return args
 
+
 def layers_to_process(stack_xml, ignore_patterns):
     from lxml.etree import fromstring
     data = fromstring(stack_xml)
-#    root = data.getroot()
     candidates = data.xpath('//layer')
     results = []
     for node in candidates:
